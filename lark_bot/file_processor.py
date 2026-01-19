@@ -403,7 +403,7 @@ def generate_excel_report(crawler):
             image_size=(100, 100),
             row_height=100,
             timeout=15,
-            max_workers=10
+            max_workers=5
         )
         
         excel_buffer = exporter.export_to_excel(

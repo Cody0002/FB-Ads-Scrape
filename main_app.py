@@ -11,7 +11,23 @@ import datetime
 import time
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
+from logging.handlers import RotatingFileHandler
+import os
+
+# Create logs directory if it doesn't exist
+if not os.path.exists('logs'):
+    os.makedirs('logs')
+
+# Configure logging with rotation
+# This keeps 5 backup files, each max 10MB
+handler = RotatingFileHandler('logs/bot.log', maxBytes=10*1024*1024, backupCount=5)
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+
+logging.getLogger().addHandler(handler)
+logging.getLogger().setLevel(logging.INFO)
+
 logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
