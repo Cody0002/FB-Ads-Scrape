@@ -19,7 +19,6 @@ import os
 
 class ExcelImageExporter:
     """Optimized Excel exporter with parallel image processing."""
-    """Optimized Excel exporter with parallel image processing."""
 
     def __init__(self, 
                     image_size: Tuple[int, int] = (80, 80),
@@ -266,12 +265,28 @@ def _filename_from_url(url: str, prefix: str) -> str:
     safe_prefix = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in prefix)[:30]
     return f"{safe_prefix}{ext}"
 
-def _download_bytes(url: str, timeout: int = 20) -> bytes | None:
+def _download_bytes(url: str, timeout: int = 20, max_bytes: int = 200 * 1024 * 1024) -> bytes | None:
     try:
-        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout, stream=True)
-        r.raise_for_status()
-        # Avoid massive memory for huge streams; cap to ~200MB each file just in case
-        return r.content[:200 * 1024 * 1024]
+        with requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout, stream=True) as r:
+            r.raise_for_status()
+            # Stream + hard cap to avoid oversized in-memory downloads.
+            chunks = []
+            total = 0
+            for chunk in r.iter_content(chunk_size=1024 * 1024):
+                if not chunk:
+                    continue
+                remaining = max_bytes - total
+                if remaining <= 0:
+                    break
+                if len(chunk) > remaining:
+                    chunk = chunk[:remaining]
+                chunks.append(chunk)
+                total += len(chunk)
+                if total >= max_bytes:
+                    break
+            if not chunks:
+                return None
+            return b"".join(chunks)
     except Exception:
         return None
 
@@ -403,7 +418,7 @@ def generate_excel_report(crawler):
             image_size=(100, 100),
             row_height=100,
             timeout=15,
-            max_workers=5
+            max_workers=3
         )
         
         excel_buffer = exporter.export_to_excel(

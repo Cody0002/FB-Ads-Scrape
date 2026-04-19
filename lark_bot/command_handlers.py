@@ -3,6 +3,7 @@ from .lark_api import LarkAPI
 from .file_processor import generate_excel_report, build_media_zip
 from tools import *
 import threading
+import logging
 import re
 import urllib.parse  # Import the specific submodule
 
@@ -16,11 +17,12 @@ import urllib.parse  # Import the specific submodule
 
 # @lru_cache(maxsize=128)
 from datetime import time as dtime
-import re
 from zoneinfo import ZoneInfo
 
 TIME_RE = re.compile(r"^\s*(\d{1,2}):(\d{2})(?:\s*(?:GMT)?([+\-]\d{1,2}))?\s*$", re.I)
+DOMAIN_RE = re.compile(r"^([a-zA-Z0-9-]{2,}\.)+[a-zA-Z]{2,}$")
 DEFAULT_TZ = ZoneInfo("Asia/Ho_Chi_Minh")  # GMT+7
+logger = logging.getLogger(__name__)
 
 def clean_url(url):
     """Optimized URL cleaning with caching"""
@@ -33,11 +35,10 @@ def clean_url(url):
     return parsed.netloc if parsed.scheme else url
 
 from datetime import datetime, timezone, timedelta
-from zoneinfo import ZoneInfo
 
 def now_str(tz_offset_hours: int | None = None) -> str:
     """
-    Current time as 'YYYY-MM-DD HH:MM GMT±H'.
+    Current time as 'YYYY-MM-DD HH:MM GMT+/-H'.
     - Default: Asia/Ho_Chi_Minh (GMT+7)
     - Or pass tz_offset_hours to use a different offset
     """
@@ -66,7 +67,7 @@ class CommandHandler:
         chat_id = state_manager.get_chat_id(user_id)
         
         if not chat_id:
-            print(f"Error: No chat_id for user {user_id}")
+            logger.warning("No chat_id found for user_id=%s", user_id)
             return
         
         # Handle known commands
@@ -97,15 +98,15 @@ class CommandHandler:
             self.handle_search_term(user_id, domain)
         elif text == "search":
             self.lark_api.reply_to_message(message_id, 
-                "❌ Please provide a domain to search.\n\n💡 Example: 'search chatbuypro.com'")
+                "Please provide a domain to search.\n\nExample: 'search chatbuypro.com'")
         elif text == "cancel":
             if state_manager.request_cancel(user_id):
-                self.lark_api.reply_to_message(message_id, "⛔ Canceling...")
+                self.lark_api.reply_to_message(message_id, "Canceling...")
             else:
-                self.lark_api.reply_to_message(message_id, "👀 No active process to cancel.")
+                self.lark_api.reply_to_message(message_id, "No active process to cancel.")
         else:
             self.lark_api.reply_to_message(message_id, 
-                "❌ Sorry, I didn't understand. Type 'help' for options")
+                "Sorry, I didn't understand. Type 'help' for options")
     
 
     def handle_add_domain(self, chat_id, message_id, domains_str: str):
@@ -126,7 +127,7 @@ class CommandHandler:
                 "elements": [{
                     "tag": "div",
                     "text": {"tag": "lark_md",
-                            "content": "❌ Please provide at least one valid domain.\n\n**Example:** `/add_domain a.com, b.com`"}
+                            "content": "Please provide at least one valid domain.\n\n**Example:** `/add_domain a.com, b.com`"}
                 }]
             }
             self.lark_api.reply_to_message(message_id=message_id, card=card, reply_in_thread=True)
@@ -147,11 +148,11 @@ class CommandHandler:
         # Build body
         lines = []
         if added:
-            lines.append("✅ **Added:**")
+            lines.append("Added:")
             lines.extend(f"- {d}" for d in added)
             lines.append("")
         if skipped:
-            lines.append("ℹ️ **Skipped** (invalid or duplicate):")
+            lines.append("Skipped (invalid or duplicate):")
             lines.extend(f"- {d}" for d in skipped)
             lines.append("")
         lines.append("**Current domains:**")
@@ -159,13 +160,13 @@ class CommandHandler:
 
         # Header style
         if added and skipped:
-            header_title = "📋 Domains updated (some added, some skipped)"
+            header_title = "Domains updated (some added, some skipped)"
             header_template = "turquoise"
         elif added:
-            header_title = "📋 Domains added successfully"
+            header_title = "Domains added successfully"
             header_template = "green"
         else:
-            header_title = "📋 No new domains added"
+            header_title = "No new domains added"
             header_template = "gray"
 
         card = {
@@ -188,16 +189,16 @@ class CommandHandler:
         if not m:
             self.lark_api.reply_to_message(
                 message_id,
-                text="❌ Invalid time. Use `HH:MM` (e.g: 18:58)."
+                text="Invalid time. Use `HH:MM` (e.g: 18:58)."
             )
             return None
         hh, mm, tzoff = int(m.group(1)), int(m.group(2)), m.group(3)
         if not (0 <= hh < 24 and 0 <= mm < 60):
-            self.lark_api.reply_to_message(message_id, text="❌ Hour/Minute out of range.")
+            self.lark_api.reply_to_message(message_id, text="Hour/Minute out of range.")
             return None
         tz_offset_hours = int(tzoff) if tzoff is not None else 7
         if tz_offset_hours < -12 or tz_offset_hours > 14:
-            self.lark_api.reply_to_message(message_id, text="❌ Timezone offset out of range (-12..+14).")
+            self.lark_api.reply_to_message(message_id, text="Timezone offset out of range (-12..+14).")
             return None
         return hh, mm, tz_offset_hours
     
@@ -252,11 +253,11 @@ class CommandHandler:
         # Build body
         lines = []
         if added_list:
-            lines.append("✅ **Added schedules:**")
+            lines.append("Added schedules:")
             lines.extend(f"- {s}" for s in added_list)
             lines.append("")
         if skipped_list:
-            lines.append("ℹ️ **Skipped** (invalid or duplicate):")
+            lines.append("Skipped (invalid or duplicate):")
             lines.extend(f"- {s}" for s in skipped_list)
             lines.append("")
         lines.append("**Current schedules:**")
@@ -264,13 +265,13 @@ class CommandHandler:
 
         # Header style
         if added_list and skipped_list:
-            header_title = "📋 Schedules updated (some added, some skipped)"
+            header_title = "Schedules updated (some added, some skipped)"
             header_template = "turquoise"
         elif added_list:
-            header_title = "📋 Schedules added successfully"
+            header_title = "Schedules added successfully"
             header_template = "green"
         else:
-            header_title = "📋 No new schedules added"
+            header_title = "No new schedules added"
             header_template = "gray"
 
         card = {
@@ -295,7 +296,7 @@ class CommandHandler:
             # remove ALL schedules for this chat
             scheds = state_manager.get_schedules(chat_id)
             if not scheds:
-                status = "ℹ️ No schedules to remove."
+                status = "No schedules to remove."
             else:
                 removed = 0
                 for s in list(scheds):
@@ -308,7 +309,7 @@ class CommandHandler:
                         removed += 1
                         
                 result = ",".join([f"{s['hour']:02d}:{s['minute']:02d}" for s in scheds]) 
-                status = f"🗑️ Removed **all {removed}** schedules:{result}"
+                status = f"Removed **all {removed}** schedules:{result}"
                 
             current_list_md = self._format_schedules_md(chat_id)
             card = {
@@ -328,8 +329,8 @@ class CommandHandler:
         hh, mm, tz_offset_hours = parsed
 
         ok = state_manager.remove_schedule(chat_id, hh, mm, tz_offset_hours)
-        status = (f"🗑️ Removed schedule **{hh:02d}:{mm:02d} GMT{tz_offset_hours:+d}**."
-                if ok else "ℹ️ Schedule not found.")
+        status = (f"Removed schedule **{hh:02d}:{mm:02d} GMT{tz_offset_hours:+d}**."
+                if ok else "Schedule not found.")
 
         current_list_md = self._format_schedules_md(chat_id)
         card = {
@@ -354,14 +355,14 @@ class CommandHandler:
         if token in {"a", "all", "*"}:
             domains = state_manager.get_domains(chat_id)
             if not domains:
-                parts = ["ℹ️ No domains to remove.", "", "**Current domains:**", "(none)"]
+                parts = ["No domains to remove.", "", "**Current domains:**", "(none)"]
             else:
                 removed = 0
                 for d in list(domains):
                     if state_manager.remove_domain(chat_id, d):
                         removed += 1
                 parts = [
-                    f"🗑️ Removed **all {removed}** domains.", "",
+                    f"Removed **all {removed}** domains.", "",
                     "**Current domains:**",
                     self._format_domains_md(chat_id)
                 ]
@@ -383,7 +384,7 @@ class CommandHandler:
                     "text": {
                         "tag": "lark_md",
                         "content": (
-                            "❌ Please provide at least one domain to remove.\n\n"
+                            "Please provide at least one domain to remove.\n\n"
                             "**Example:** `/remove_domain foo.com, bar.com`"
                         )
                     }
@@ -411,13 +412,13 @@ class CommandHandler:
         current_list_md = self._format_domains_md(chat_id)
 
         # Build response card
-        parts = ["📋 **Domain update**", ""]
+        parts = ["**Domain update**", ""]
         if removed:
-            parts.append("🗑️ Removed:")
+            parts.append("Removed:")
             parts.extend(f"- {d}" for d in removed)
             parts.append("")
         if missing:
-            parts.append("ℹ️ Not found:")
+            parts.append("Not found:")
             parts.extend(f"- {d}" for d in missing)
             parts.append("")
         parts.append("**Current domains:**")
@@ -434,9 +435,6 @@ class CommandHandler:
         self.lark_api.reply_to_message(message_id=message_id, card=card, reply_in_thread=True)
 
     def handle_list_crawl(self, chat_id, message_id):
-        domains = state_manager.get_domains(chat_id)
-        schedules = state_manager.get_schedules(chat_id)
-
         # domains_text = ("\n- " + "\n- ".join(sorted(domains))) if domains else "\n(no domains added)"
         domains_text = self._format_domains_md(chat_id)
         schedules_text = self._format_schedules_md(chat_id)
@@ -454,7 +452,7 @@ class CommandHandler:
             "header": {
                 "template": "indigo",
                     "title": {
-                        "content": "📋 Daily Crawl Configuration",
+                        "content": "Daily Crawl Configuration",
                         "tag": "plain_text"
                     }
             },
@@ -472,65 +470,24 @@ class CommandHandler:
         chat_id = state_manager.get_chat_id(user_id)
         
         if not chat_id:
-            print(f"Error: No chat_id for user {user_id}")
+            logger.warning("No chat_id found for user_id=%s", user_id)
             return
         
         # Check if search already in progress
         if state_manager.get_state(user_id) == "IN_PROGRESS":
             self.lark_api.reply_to_message(
                 message_id,
-                "🔄 A search is already in progress. Type 'cancel' to stop it and start a new one."
+                "A search is already in progress. Type 'cancel' to stop it and start a new one."
             )
             return
 
         search_term = clean_url(search_term)
-        print(f"Cleaned search term: {search_term}")
+        logger.debug("Cleaned search term: %s", search_term)
 
         if not self.is_valid_domain(message_id, search_term):
             return
 
-        print("Starting search...")
-        state_manager.set_state(user_id, "IN_PROGRESS", chat_id)
-
-        # Create processing card
-        card = domain_processing_card(search_word=search_term, progress_percent=0)
-        reply_message_id = self.lark_api.reply_to_message(
-            message_id=message_id,
-            card=card,
-            reply_in_thread=True
-        )
-        
-        # Start background thread
-        threading.Thread(
-            target=self.process_search_async,
-            args=(user_id, search_term, reply_message_id),
-            daemon=True
-        ).start()
-
-    def handle_search_term(self, user_id, search_term):
-        message_info = state_manager.get_message_info(user_id)
-        message_id = message_info["message_id"]
-        chat_id = state_manager.get_chat_id(user_id)
-        
-        if not chat_id:
-            print(f"Error: No chat_id for user {user_id}")
-            return
-        
-        # Check if search already in progress
-        if state_manager.get_state(user_id) == "IN_PROGRESS":
-            self.lark_api.reply_to_message(
-                message_id,
-                "🔄 A search is already in progress. Type 'cancel' to stop it and start a new one."
-            )
-            return
-
-        search_term = clean_url(search_term)
-        print(f"Cleaned search term: {search_term}")
-
-        if not self.is_valid_domain(message_id, search_term):
-            return
-
-        print("Starting search...")
+        logger.info("Starting search user_id=%s term=%s", user_id, search_term)
         state_manager.set_state(user_id, "IN_PROGRESS", chat_id)
 
         # Create processing card
@@ -554,7 +511,7 @@ class CommandHandler:
         chat_id = state_manager.get_chat_id(user_id)
         
         if not chat_id:
-            print(f"Error: No chat_id for user {user_id}")
+            logger.warning("No chat_id found for user_id=%s", user_id)
             return
         
         try:
@@ -563,7 +520,7 @@ class CommandHandler:
             
             # Check cancellation before starting
             if state_manager.should_cancel(user_id):
-                self.lark_api.reply_to_message(message_id, "⛔ Process cancelled before starting!")
+                self.lark_api.reply_to_message(message_id, "Process cancelled before starting!")
                 return
                     
             file_buffer, filename, df = generate_excel_report(crawler)
@@ -622,12 +579,12 @@ class CommandHandler:
                         )
 
             else:
-                self.lark_api.reply_to_message(message_id, "⛔ Process cancelled successfully!")
+                self.lark_api.reply_to_message(message_id, "Process cancelled successfully!")
         except Exception as e:
             if not state_manager.should_cancel(user_id):
-                self.lark_api.reply_to_message(message_id, f"❌ Error processing request: {str(e)}")
+                self.lark_api.reply_to_message(message_id, f"Error processing request: {str(e)}")
             else:
-                self.lark_api.reply_to_message(message_id, "⛔ Process cancelled due to error!")
+                self.lark_api.reply_to_message(message_id, "Process cancelled due to error!")
         finally:
             # Cleanup resources
             if 'file_buffer' in locals() and file_buffer:
@@ -641,22 +598,17 @@ class CommandHandler:
         self.lark_api.send_interactive_card(chat_id)
 
     def is_valid_domain(self, message_id, domain):
-        print(f"Validating domain: {domain}")
+        logger.debug("Validating domain=%s", domain)
         
         # Quick checks first for efficiency
         if '@' in domain or len(domain) < 4:
             self.lark_api.reply_to_message(message_id, 
-                "❌ Invalid domain format. Please provide a valid domain [e.g., chatbuypro.com]:")
+                "Invalid domain format. Please provide a valid domain [e.g., chatbuypro.com]:")
             return False
 
-        # Use compiled regex for efficiency
-        domain_pattern = re.compile(
-            r'^([a-zA-Z0-9-]{2,}\.)+[a-zA-Z]{2,}$'
-        )
-
-        if not domain_pattern.fullmatch(domain):
+        if not DOMAIN_RE.fullmatch(domain):
             self.lark_api.reply_to_message(message_id, 
-                "❌ Invalid domain or domain is too short. \nPlease provide a valid domain [e.g., chatbuypro.com]:")
+                "Invalid domain or domain is too short.\nPlease provide a valid domain [e.g., chatbuypro.com]:")
             return False
 
         return True
@@ -673,13 +625,13 @@ class CommandHandler:
         if not domains:
             return
 
-        # 1) Header: "Start searching for schedule at HH:MM GMT±X"
+        # 1) Header: "Start searching for schedule at HH:MM GMT+/-X"
         if hour is not None and minute is not None:
             stamp = f"{hour:02d}:{minute:02d} GMT{tz_offset:+d}"
         else:
             # fall back to your helper (defaults to GMT+7)
             stamp = now_str()
-        self.lark_api.send_text(chat_id, f"🚀 Start searching for schedule at {stamp}")
+        self.lark_api.send_text(chat_id, f"Start searching for schedule at {stamp}")
 
         # 2) For each domain: post "/search domain" then run it in that thread
         for domain in sorted(domains):
@@ -704,3 +656,4 @@ class CommandHandler:
 
 
 command_handler = CommandHandler()
+

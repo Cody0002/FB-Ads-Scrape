@@ -80,12 +80,13 @@ def health_check():
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    # ENHANCED DEBUG: Show all event types and details
-    print("HIII")
     data = request.json
-    chat_type = data.get("event", {}).get("message", {}).get("chat_type")
+    if data is None:
+        return jsonify({"error": "Invalid JSON payload"}), 400
 
-    print("Received event:", json.dumps(data, indent=2))
+    chat_type = data.get("event", {}).get("message", {}).get("chat_type")
+    logger.debug("Webhook received event_type=%s chat_type=%s",
+                 data.get("header", {}).get("event_type"), chat_type)
     # URL verification
     if data.get('type') == 'url_verification':
         return jsonify({'challenge': data.get('challenge')})
@@ -111,9 +112,6 @@ def scheduler_loop():
     while True:
         try:
             now_utc = datetime.datetime.utcnow()
-
-            # Log the current UTC time for debugging
-            print(f"[Scheduler] Tick! Current UTC time: {now_utc.isoformat()}")
 
             # Iterate all chats that have at least one schedule
             for cid, schedules in list(state_manager.chat_schedules.items()):

@@ -1,13 +1,14 @@
 import json
+import logging
 from .state_managers import state_manager
 from .command_handlers import command_handler
 from .logger import message_logger
 
+logger = logging.getLogger(__name__)
+
 def handle_incoming_message(event_data):
     # Access the nested structure correctly
-    print(event_data)
     message = event_data["event"]["message"]
-    print("Received message:", message)
     chat_id = message["chat_id"]
     message_id = message["message_id"]
     user_id = event_data["event"]["sender"]["sender_id"]["user_id"]
@@ -16,7 +17,7 @@ def handle_incoming_message(event_data):
     content = json.loads(message["content"])
     text = content.get("text", "").strip().lower()
 
-    print("Parsed content:", text)
+    logger.debug("Incoming message parsed user_id=%s chat_id=%s text=%s", user_id, chat_id, text)
 
     # Log incoming message
     message_logger.log_message(user_id= user_id, 
@@ -28,10 +29,10 @@ def handle_incoming_message(event_data):
     # Store chat_id mapping only if state is None
     current_state = state_manager.get_state(user_id)
     if current_state is None:
-        print(f"State is None for user_id {user_id}, setting chat_id mapping")
+        logger.debug("Initializing state mapping for user_id=%s", user_id)
         state_manager.set_state(user_id, None, chat_id, message_id)
 
-    print(f"Current state: {current_state}, user_id: {user_id}, chat_id: {chat_id}, text: {text}")
+    logger.debug("Current state=%s user_id=%s chat_id=%s", current_state, user_id, chat_id)
 
     # Handle cancel command regardless of state
     if text == "cancel":

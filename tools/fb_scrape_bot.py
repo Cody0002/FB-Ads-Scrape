@@ -142,6 +142,16 @@ class FacebookAdsCrawler:
 
     def should_stop(self):
         return self._stop_event.is_set() or state_manager.should_cancel(self.chat_id)
+
+    def force_stop(self):
+        """Best-effort stop used by cancel flow to free resources quickly."""
+        self._stop_event.set()
+        try:
+            if self.driver:
+                self.driver.quit()
+                self.driver = None
+        except Exception:
+            pass
     
     def initialize_driver(self):
         if self.should_stop(): return False
