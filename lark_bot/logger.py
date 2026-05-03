@@ -25,14 +25,14 @@ class OptimizedLogger:
             # Ensure log directory exists
             self.log_dir.mkdir(parents=True, exist_ok=True)
 
-            # --- NEW: Run cleanup on startup ---
+            # Run cleanup on startup (keep only recent logs to save disk space)
             # Run in a separate thread so it doesn't slow down bot startup
-            threading.Thread(target=self.cleanup_old_logs, args=(60,), daemon=True).start()
+            threading.Thread(target=self.cleanup_old_logs, args=(3,), daemon=True).start()
     
-    def cleanup_old_logs(self, days_to_keep=60):
+    def cleanup_old_logs(self, days_to_keep=3):
         """
         Deletes chat_logs_*.json files older than 'days_to_keep'.
-        Default is 60 days (2 months).
+        Default is 3 days.
         """
         try:
             cutoff_time = time.time() - (days_to_keep * 86400) # Current time minus days in seconds
